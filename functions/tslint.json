@@ -108,7 +108,19 @@
     "prefer-const": {"severity": "warning"},
 
     // Multi-line object literals and function calls should have a trailing comma. This helps avoid merge conflicts.
-    "trailing-comma": {"severity": "warning"}
+    "trailing-comma": {"severity": "warning"},
+
+    // -- Custom --
+    // Because it follows my taste for code
+
+    // Only allow single quotes for strings
+    "quotemark": [true, "single", "avoid-template"],
+
+    // Disallow unnecessary semicolons
+    "semicolon": [true, "never"],
+
+    // Ensures that all files end with a newline
+    "eofline": true
   },
 
   "defaultSeverity": "error"
