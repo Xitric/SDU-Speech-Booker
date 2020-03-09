@@ -8,17 +8,24 @@ interface ItemData {
 
 const app = dialogflow<ItemData, {}>({debug: true})
 
-app.intent('out of items', (conv, {item}) => {
-    //Store item in user data?
-    conv.data.item = item
-    conv.ask(`Would you like to add ${item} to your shopping list?`)
-    conv.ask(new Suggestions('Yes', 'No'))
+app.intent('welcome', (conv) => {
+    const action = conv.action
+
+    if (action === 'input.welcome') {
+        conv.ask('Welcome, I am the SDU room booker. Would you like to book a room, or hear about your current bookings?')
+    } else {
+        conv.ask('Would you like to book a room, or hear about your current bookings?')
+    }
+    conv.ask(new Suggestions('Book a room', 'Current bookings'))
 })
 
-app.intent('discounts - yes', (conv) => {
-    //Retrieve item from user data?
-    conv.close(`Sorry, no discounts available on ${conv.data.item}!`)
+app.intent('welcome - make booking - time', (conv) => {
+    const dateTime = conv.parameters['date-time']
+    const timePeriod = conv.parameters['time-period']
+    console.log(dateTime)
+    console.log(timePeriod)
 })
+
 
 // Handle HTTPS POST requests
 export const fulfillment = functions.https.onRequest(app)
