@@ -1,14 +1,26 @@
 import * as functions from 'firebase-functions'
 import {dialogflow, Suggestions} from 'actions-on-google'
 
-// Instantiate DialogFlow client
-interface ItemData {
-    names: [String]
-    roomName: String
-    date: Date
-    startTime: Date
-    endTime: Date
+const ActionContexts = {
+    root: 'root',
+    view: 'view',
+    booking: 'booking',
+    booking_expects_time: 'booking_expects_time',
+    booking_available: 'booking_available',
+    booking_unavailable: 'booking_unavailable',
+    booking_browsing: 'booking_browsing',
+    booking_expects_participant: 'booking_expects_participant'
+}
 
+interface Booking {
+    room: string
+    date: string
+    start: string
+    end: string
+}
+
+interface UserStorage {
+    bookings: Booking[]
 }
 
 interface TimePeriod {
@@ -16,99 +28,131 @@ interface TimePeriod {
     endTime: string
 }
 
-interface UserStorage {
-    bookings: [ItemData]
-}
+// Instantiate DialogFlow client
+const app = dialogflow<{}, UserStorage>({debug: true})
 
-
-const app = dialogflow<ItemData, UserStorage>({debug: true})
-
-app.intent('welcome - current bookings', (conv) => {
-    if(!conv.user.storage.bookings){
-        conv.ask('No bookings available')
-    }else{
-        //let booking = 'Your bookings are '
-        //for(let field of conv.user.storage.bookings){
-        //    booking += field.roomName
-        //    booking += ' on '
-        //    booking += field.date
-        //    booking += ' from '
-        //    booking += field.startTime
-        //    booking += ' to '
-        //    booking += field.endTime
-        //}
-        conv.ask(''+conv.data.names)
-    }
-
-})
-
-app.intent(['welcome', 'welcome - make booking - time - no'], (conv) => {
-    const action = conv.action
-
-    if (action === 'input.welcome') {
+app.intent(['welcome', 'booking.cancel'], (conv, some) => {
+    if (conv.query.endsWith('WELCOME')) {
         conv.ask('Welcome, I am the SDU room booker. Would you like to book a room, or hear about your current bookings?')
     } else {
         conv.ask('Would you like to book a room, or hear about your current bookings?')
     }
-    conv.ask(new Suggestions('Book a room', 'Current bookings'))
+    conv.contexts.set(ActionContexts.root, 1)
+    conv.ask(new Suggestions('Book a room', 'View bookings'))
 })
 
-app.intent(['welcome - make booking', 'welcome - make booking - time - yes'], (conv) => {
-    conv.ask(   'When would you like to book a room?')
+app.intent(['booking', 'booking.different_time', 'view.book'], (conv) => {
+    conv.contexts.set(ActionContexts.booking_expects_time, 1)
+    conv.ask('When would you like to book a room?')
 })
 
-app.intent('welcome - make booking - time', (conv) => {
-    const dateTime = conv.parameters['date-time']
-    const timePeriod = conv.parameters['time-period'] as TimePeriod
-    if (dateTime && timePeriod) {
-        //conv.contexts.set('makebooking-no-rooms', 2, {})
-        //conv.ask('I am sorry, but there are no available rooms at that time. Do you want to book a room at a different time?')
+app.intent('booking.time', (conv) => {
+    // TODO: convert to date objects, should work now
+    const date = conv.parameters['date-time'] as string
+    const period = conv.parameters['time-period'] as TimePeriod
 
-       // conv.data.date = new Date(dateTime.toString())
-       // conv.data.startTime = new Date(timePeriod.startTime)
-        //conv.data.endTime = new Date(timePeriod.endTime)
-        conv.data.roomName = '1.021'
+    if (date && period) {
+        // conv.contexts.set(ActionContexts.booking_available, 1)
+        // conv.contexts.set(ActionContexts.booking, 1, {
+        //     proposedRoom: '1.021',
+        //     date: date,
+        //     start: period.startTime,
+        //     end: period.endTime
+        // })
+        //
+        // conv.ask('I have found ten rooms at TEK. How about room 1.021?')
 
-        conv.contexts.set('makebooking-rooms', 2, {})
-        conv.ask('I have found ten rooms at TEK. How about room 1.021?')
-
+        conv.contexts.set(ActionContexts.booking_unavailable, 1)
+        conv.ask('I am sorry, but there are no available rooms at that time. Do you want to book a room at a different time?')
     }
 })
 
-app.intent('welcome - make booking - time - yes-2 - add person', (conv) => {
-    let firstName = conv.parameters['first-name'] as String
-    const lastName = conv.parameters['last-name']
-    firstName += lastName? ' ' + lastName: ''
+app.intent('booking.confirm_room', (conv) => {
+    const ctx = conv.contexts.get(ActionContexts.booking)
+    if (ctx) {
+        conv.contexts.set(ActionContexts.booking_expects_participant, 1)
+        conv.contexts.set(ActionContexts.booking, 1, {
+            room: ctx.parameters['proposedRoom'],
+            date: ctx.parameters['date'],
+            start: ctx.parameters['start'],
+            end: ctx.parameters['end']
+        })
 
-    if (!conv.data.names){
-        conv.data.names = [firstName]
-    } else {
-        conv.data.names.push(firstName)
+        conv.ask('Alright! Who is the first person you want to add to your booking?')
     }
-
-    conv.ask('Do you want to add another person?' + conv.data.roomName)
-
 })
 
-app.intent('welcome - make booking - time - yes-2 - no', (conv) => {
+app.intent('booking.add_participant', (conv, {person: name}: {person: string}) => {
+    const ctx = conv.contexts.get(ActionContexts.booking)
+    if (ctx) {
+        let participants: string[]
+
+        if (ctx.parameters['participants']) {
+            participants = ctx.parameters['participants'] as string[]
+            participants.push(name)
+        } else {
+            participants = [name]
+        }
+
+        conv.contexts.set(ActionContexts.booking_expects_participant, 1)
+        conv.contexts.set(ActionContexts.booking, 1, {
+            room: ctx.parameters['room'],
+            date: ctx.parameters['date'],
+            start: ctx.parameters['start'],
+            end: ctx.parameters['end'],
+            participants: participants
+        })
+
+        conv.ask('Anyone else you wish to add, or was that all?')
+    }
+})
+
+app.intent('booking.complete', (conv) => {
+    const ctx = conv.contexts.get('booking')
+    if (ctx) {
+        const booking: Booking = {
+            room: ctx.parameters['room'] as string || 'ERROR',
+            // TODO: Cannot store in user storage, I think
+            // participants: ctx.parameters['participants'] as string[],
+            date: ctx.parameters['date'] as string || 'ERROR',
+            start: ctx.parameters['start'] as string || 'ERROR',
+            end: ctx.parameters['end'] as string || 'ERROR'
+        }
+
+        if (!conv.user.storage.bookings) {
+            conv.user.storage.bookings = [booking]
+        } else {
+            conv.user.storage.bookings.push(booking)
+        }
+    }
+
+    conv.contexts.set(ActionContexts.root, 1)
     conv.ask('Your booking has been completed. ' +
-        'Would you like to book another room or see your current bookings?')
-    conv.contexts.set('welcome-followup', 2, {})
+        'Would you like to book another room, or hear about your current bookings?')
+    conv.ask(new Suggestions('Book a room', 'View bookings'))
+})
 
-    let copyData: ItemData = {
-        roomName: conv.data.roomName,
-        date: conv.data.date,
-        startTime: conv.data.startTime,
-        endTime: conv.data.endTime,
-        names: ['']
+app.intent('view', (conv) => {
+    conv.contexts.set(ActionContexts.view, 1)
 
-    }
-    Object.assign(copyData, conv.data)
-
-    if(!conv.user.storage.bookings) {
-        conv.user.storage.bookings = [copyData]
-    }else {
-        conv.user.storage.bookings.push(copyData)
+    if (!conv.user.storage.bookings) {
+        conv.ask('It looks like you don\'t have any bookings. Would your like to book a room?')
+    } else {
+        let prefix = ''
+        let msg = 'Your bookings are '
+        for (const booking of conv.user.storage.bookings) {
+            msg += prefix
+            msg += booking.room
+            msg += ' on '
+            msg += booking.date
+            msg += ' from '
+            msg += booking.start
+            msg += ' to '
+            msg += booking.end
+            prefix = ' and '
+        }
+        msg += '. Would you like to book another room?'
+        conv.ask(msg)
     }
 })
 
