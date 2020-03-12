@@ -8,7 +8,7 @@ interface ItemData {
 
 const app = dialogflow<ItemData, {}>({debug: true})
 
-app.intent('welcome', (conv) => {
+app.intent(['welcome', 'welcome - make booking - time - no'], (conv) => {
     const action = conv.action
 
     if (action === 'input.welcome') {
@@ -19,13 +19,19 @@ app.intent('welcome', (conv) => {
     conv.ask(new Suggestions('Book a room', 'Current bookings'))
 })
 
+app.intent(['welcome - make booking', 'welcome - make booking - time - yes'], (conv) => {
+    conv.ask('When do you want to book a room?',
+        'When would you like to book a room?')
+})
+
 app.intent('welcome - make booking - time', (conv) => {
     const dateTime = conv.parameters['date-time']
     const timePeriod = conv.parameters['time-period']
-    console.log(dateTime)
-    console.log(timePeriod)
+    if (dateTime && timePeriod) {
+        conv.contexts.set('makebooking-no-rooms', 5, {})
+        conv.ask('I am sorry, but there are no available rooms at that time. Do you want to book a room at a different time?')
+    }
 })
-
 
 // Handle HTTPS POST requests
 export const fulfillment = functions.https.onRequest(app)
