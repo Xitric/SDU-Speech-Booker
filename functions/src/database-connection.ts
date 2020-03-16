@@ -1,4 +1,6 @@
 import * as admin from 'firebase-admin'
+import {user} from "firebase-functions/lib/providers/auth";
+import {User} from "actions-on-google/dist/service/actionssdk/conversation/user";
 
 interface User {
     name: string
@@ -63,9 +65,14 @@ export async function getAvailableRooms(start: Date, end: Date): Promise<Room[]>
 }
 
 export async function getRelevantUsersByName(userRealName: string, context: User): Promise<User[]> {
-
+    const allUsers = await admin.firestore().collection('users').get()
+    const firstname = userRealName.split(' ') [0]
+    const filteredUser = allUsers.docs.map(users => (users.data() as User) ).filter(userResult => userResult.name.split(' ') [0] === firstname)
+    const matchedUsers = filteredUser.filter(matchUser => matchUser.education === context.education)
+    return matchedUsers
 }
 
 export async function getUser(userName: string): Promise<User> {
-
+    const userResult = await admin.firestore().collection('users').doc(userName).get()
+    return userResult.data() as User
 }
