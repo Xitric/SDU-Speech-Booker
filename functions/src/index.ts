@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions'
 import {dialogflow, Suggestions} from 'actions-on-google'
+import * as firestore from './database-connection'
 
 const ActionContexts = {
     root: 'root',
@@ -31,8 +32,14 @@ interface TimePeriod {
 // Instantiate DialogFlow client
 const app = dialogflow<{}, UserStorage>({debug: true})
 
-app.intent(['welcome', 'booking.cancel'], (conv, some) => {
+app.intent(['welcome', 'booking.cancel'], (conv) => {
     if (conv.query.endsWith('WELCOME')) {
+        firestore.init()
+        firestore.getBookingsFor('eniel16').then(result => {
+            console.log(result)
+        }).catch(error => {
+            console.log(error)
+        })
         conv.ask('Welcome, I am the SDU room booker. Would you like to book a room, or hear about your current bookings?')
     } else {
         conv.ask('Would you like to book a room, or hear about your current bookings?')
