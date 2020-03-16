@@ -1,10 +1,10 @@
 import * as admin from 'firebase-admin'
 
-// interface User {
-//     name: string
-//     email: string
-//     education: string
-// }
+interface User {
+    name: string
+    email: string
+    education: string
+}
 
 interface InternalBooking {
     start: admin.firestore.Timestamp
@@ -52,4 +52,20 @@ export async function getBookingsFor(userName: string): Promise<Booking[]> {
         })
     })
     return await Promise.all(bookingRoomPromises)
+}
+
+export async function createBooking(room: string, participants: string[], start: Date, end: Date) {
+    return null
+}
+
+export async function getAvailableRooms(start: Date, end: Date): Promise<Room[]> {
+
+}
+
+export async function getRelevantUsersByName(userRealName: string, context: User): Promise<User[]> {
+
+}
+
+export async function getUser(userName: string): Promise<User> {
+
 }
