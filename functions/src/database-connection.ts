@@ -1,17 +1,13 @@
 import * as admin from 'firebase-admin'
-import {user} from "firebase-functions/lib/providers/auth";
-import {User} from "actions-on-google/dist/service/actionssdk/conversation/user";
 
-interface User {
+export interface User {
     name: string
     email: string
     education: string
 }
 
-interface InternalBooking {
-    start: admin.firestore.Timestamp
-    end: admin.firestore.Timestamp
-    room: admin.firestore.DocumentReference
+export interface Room {
+    room: string
 }
 
 export interface Booking {
@@ -20,8 +16,10 @@ export interface Booking {
     room: string
 }
 
-export interface Room {
-    room: string
+interface InternalBooking {
+    start: admin.firestore.Timestamp
+    end: admin.firestore.Timestamp
+    room: admin.firestore.DocumentReference
 }
 
 export function init() {
@@ -47,7 +45,6 @@ export async function getAvailableRooms(start: Date, end: Date): Promise<Room[]>
     //Get occupied rooms
     //First we get the bookings that end after our booking begins
     const bookingRefs = await admin.firestore().collection('bookings')
-    // .where('end', '>', startTimestamp)
         .where('end', '>', start)
         .get()
     //Then we get the bookings that start before our booking ends
@@ -87,10 +84,38 @@ export async function createBooking(room: string, participants: string[], start:
 
 export async function getRelevantUsersByName(userRealName: string, context: User): Promise<User[]> {
     const allUsers = await admin.firestore().collection('users').get()
-    const firstname = userRealName.split(' ') [0]
-    const filteredUser = allUsers.docs.map(users => (users.data() as User) ).filter(userResult => userResult.name.split(' ') [0] === firstname)
-    const matchedUsers = filteredUser.filter(matchUser => matchUser.education === context.education)
-    return matchedUsers
+
+    //It is definitely not users with a mismatching first name
+    const firstName = userRealName.split(' ')[0]
+    const filteredByFirstName = allUsers.docs.map(users => (users.data() as User)).filter(userResult => userResult.name.split(' ')[0] === firstName)
+
+    //Matching last names are good indicators for relevance
+    const lastNames = userRealName.split(' ').slice(1)
+    const filteredByLastNames = arrangeByLastName(filteredByFirstName, lastNames)
+
+    //It is less likely, but not impossible, to be someone from another education
+    const likelyFilteredByEducation = arrangeByEducation(filteredByLastNames[0], context.education)
+    const unlikelyFilteredByEducation = arrangeByEducation(filteredByLastNames[1], context.education)
+
+    //Return most likely users followed by less likely ones
+    return likelyFilteredByEducation[0]
+        .concat(likelyFilteredByEducation[1])
+        .concat(unlikelyFilteredByEducation[0])
+        .concat(unlikelyFilteredByEducation[1])
+}
+
+function arrangeByEducation(users: User[], targetEducation: string): [User[], User[]] {
+    const likelyUsers = users.filter(userResult => userResult.education === targetEducation)
+    const unlikelyUsers = users.filter(userResult => !likelyUsers.includes(userResult))
+
+    return [likelyUsers, unlikelyUsers]
+}
+
+function arrangeByLastName(users: User[], lastNames: string[]): [User[], User[]] {
+    const likelyUsers = users.filter(userResult => lastNames.some(n => userResult.name.includes(n)))
+    const unlikelyUsers = users.filter(userResult => !likelyUsers.includes(userResult))
+
+    return [likelyUsers, unlikelyUsers]
 }
 
 export async function getUser(userName: string): Promise<User> {
