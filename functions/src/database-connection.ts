@@ -7,6 +7,13 @@ export interface User {
 }
 
 export interface Room {
+    name: string
+    id: string
+    lat: number
+    lon: number
+}
+
+interface InternalRoom {
     room: string
     lat: number
     lon: number
@@ -85,10 +92,19 @@ export async function getAvailableRooms(start: Date, end: Date): Promise<Room[]>
 
     //Get all rooms
     const roomRefs = await admin.firestore().collection('rooms').get()
-    const allRooms = roomRefs.docs.map(roomRef => roomRef.data() as Room)
+    const allRooms = roomRefs.docs.map(roomRef =>  {
+        const internalRoom = roomRef.data() as InternalRoom
+        const room: Room = {
+            name: internalRoom.room,
+            id: roomRef.id,
+            lat: internalRoom.lat,
+            lon: internalRoom.lon
+        }
+        return room
+    })
 
     //Filter occupied rooms and return the rest
-    return allRooms.filter(room => !allBookings.some(occupied => occupied.room === room.room))
+    return allRooms.filter(room => !allBookings.some(occupied => occupied.room === room.name))
 }
 
 export async function getAvailableRoomsByLocation(start: Date, end: Date, location: Coordinate): Promise<Room[]> {
@@ -112,7 +128,7 @@ async function addRoomsToBookings(internalBookings: InternalBooking[]): Promise<
                 resolve({
                     start: internalBooking.start.toDate(),
                     end: internalBooking.end.toDate(),
-                    room: (roomResult.data() as Room).room
+                    room: (roomResult.data() as InternalRoom).room
                 })
             }).catch(error => {
                 reject(error)
