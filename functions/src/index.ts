@@ -69,6 +69,8 @@ app.intent('booking.time', (conv) => {
         //
         // conv.ask('I have found ten rooms at TEK. How about room 1.021?')
 
+        //test
+
         conv.contexts.set(ActionContexts.booking_unavailable, 1)
         conv.ask('I am sorry, but there are no available rooms at that time. Do you want to book a room at a different time?')
     }
