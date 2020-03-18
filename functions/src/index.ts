@@ -11,7 +11,8 @@ const ActionContexts = {
     booking_available: 'booking_available',
     booking_unavailable: 'booking_unavailable',
     booking_browsing: 'booking_browsing',
-    booking_expects_participant: 'booking_expects_participant'
+    booking_expects_participant: 'booking_expects_participant',
+    welcome_expects_permission: 'welcome_expects_permission'
 }
 
 interface Booking {
@@ -22,7 +23,8 @@ interface Booking {
 }
 
 interface UserStorage {
-    bookings: Booking[]
+    bookings: Booking[],
+    name: string
     prefLoc: {
         lat: number,
         lon: number
@@ -40,22 +42,35 @@ const app = dialogflow<{}, UserStorage>({debug: true})
 app.intent(['welcome', 'booking.cancel'], (conv) => {
     if (conv.query.endsWith('WELCOME')) {
         firestore.init()
-        // firestore.getBookingsFor('eniel16').then(result => {
-        //     console.log(result)
-        // }).catch(error => {
-        //     console.log(error)
-        // })
-        // firestore.createBooking('_te_52183', ['eniel16', 'kdavi16'], new Date(), new Date()).then(result => {
-        //     console.log(result)
-        // }).catch(error => {
-        //     console.log(error)
-        // })
 
-        conv.ask('Welcome, I am the SDU room booker. Would you like to book a room, or hear about your current bookings?')
+        if (! conv.user.storage.name) {
+            conv.contexts.set(ActionContexts.welcome_expects_permission, 1)
+            conv.ask(new Permission({
+                context: 'Welcome, I am the SDU room booker. To provide a personalized experience',
+                permissions: 'NAME'
+            }))
+            return
+        } else {
+            conv.ask(`Welcome ${conv.user.storage.name}, I am the SDU room booker. Would you like to book a room, or hear about your current bookings?`)
+        }
     } else {
         conv.ask('Would you like to book a room, or hear about your current bookings?')
     }
+
     conv.contexts.set(ActionContexts.root, 1)
+    conv.ask(new Suggestions('Book a room', 'View bookings'))
+})
+
+app.intent('welcome.name_permission', (conv, _, permissionGranted) => {
+    conv.contexts.set(ActionContexts.root, 1)
+
+    if (!permissionGranted) {
+        conv.ask('How do you expect to book a room when you won\'t let me know who you are? Now, would you like to book a room, or hear about your current bookings?')
+    } else {
+        conv.user.storage.name = conv.user.name.display || ''
+        conv.ask(`Alright ${conv.user.storage.name}, would you like to book a room, or hear about your current bookings?`)
+    }
+
     conv.ask(new Suggestions('Book a room', 'View bookings'))
 })
 
