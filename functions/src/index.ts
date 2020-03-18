@@ -54,6 +54,12 @@ app.intent(['welcome', 'booking.cancel'], (conv) => {
     conv.ask(new Suggestions('Book a room', 'View bookings'))
 })
 
+app.intent('booking.browse', (conv) => {
+    conv.contexts.set(ActionContexts.booking, 1)
+    conv.contexts.set(ActionContexts.booking_available, 1)
+    conv.ask('Okay, how about ROOM')
+})
+
 app.intent(['booking', 'booking.different_time', 'view.book'], (conv) => {
     conv.contexts.set(ActionContexts.booking_expects_time, 1)
     conv.ask('When would you like to book a room?')
@@ -65,18 +71,19 @@ app.intent('booking.time', (conv) => {
     const period = conv.parameters['time-period'] as TimePeriod
 
     if (date && period) {
-        // conv.contexts.set(ActionContexts.booking_available, 1)
-        // conv.contexts.set(ActionContexts.booking, 1, {
-        //     proposedRoom: '1.021',
-        //     date: date,
-        //     start: period.startTime,
-        //     end: period.endTime
-        // })
-        //
-        // conv.ask('I have found ten rooms at TEK. How about room 1.021?')
+        conv.contexts.set(ActionContexts.booking_available, 1)
+        conv.contexts.set(ActionContexts.booking, 1, {
+            proposedRoom: '1.021',
+            date: date,
+            start: period.startTime,
+            end: period.endTime
+        })
 
-        conv.contexts.set(ActionContexts.booking_unavailable, 1)
-        conv.ask('I am sorry, but there are no available rooms at that time. Do you want to book a room at a different time?')
+        conv.ask('I have found ten rooms at TEK. How about room 1.021?')
+
+
+        // conv.contexts.set(ActionContexts.booking_unavailable, 1)
+        // conv.ask('I am sorry, but there are no available rooms at that time. Do you want to book a room at a different time?')
     }
 })
 
