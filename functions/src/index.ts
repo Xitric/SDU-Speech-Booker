@@ -154,27 +154,63 @@ app.intent('booking.complete', (conv) => {
 })
 
 app.intent('view', (conv) => {
-    conv.contexts.set(ActionContexts.view, 1)
+    const months = [ 'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December' ]
 
-    if (!conv.user.storage.bookings) {
-        conv.ask('It looks like you don\'t have any bookings. Would your like to book a room?')
-    } else {
-        let prefix = ''
-        let msg = 'Your bookings are '
-        for (const booking of conv.user.storage.bookings) {
-            msg += prefix
-            msg += booking.room
-            msg += ' on '
-            msg += booking.date
-            msg += ' from '
-            msg += booking.start
-            msg += ' to '
-            msg += booking.end
-            prefix = ' and '
+    conv.contexts.set(ActionContexts.view, 1)
+    return firestore.getBookingsFor('eniel16').then(bookings => {
+        if(bookings.length > 0){
+            let prefix = ''
+            let msg = 'Your bookings are '
+            for (const booking of bookings){
+                msg += prefix
+                msg += booking.room
+                msg += ' on '
+                msg += months[booking.start.getMonth()]
+                msg += ' '
+                msg += booking.start.getDate()
+                msg += ' '
+                msg += booking.start.getFullYear()
+                msg += ' from '
+                msg += booking.start.getHours()
+                msg += ':'
+                msg += booking.start.getMinutes()
+                msg += ' to '
+                msg += booking.end.getHours()
+                msg += ':'
+                msg += booking.end.getMinutes()
+                prefix = ' and '
+            }
+            msg += '. Would you like to book another room?'
+            conv.ask(msg)
+        }else {
+            conv.ask('It looks like you don\'t have any bookings. Would your like to book a room?')
         }
-        msg += '. Would you like to book another room?'
-        conv.ask(msg)
-    }
+    })
+
+    return
+
+    // if (!conv.user.storage.bookings) {
+    //     conv.ask('It looks like you don\'t have any bookings. Would your like to book a room?')
+    // } else {
+    //     let prefix = ''
+    //     let msg = 'Your bookings are '
+    //     for (const booking of conv.user.storage.bookings) {
+    //         msg += prefix
+    //         msg += booking.room
+    //         msg += ' on '
+    //         msg += booking.date
+    //         msg += ' from '
+    //         msg += booking.start
+    //         msg += ' to '
+    //         msg += booking.end
+    //         prefix = ' and '
+    //     }
+    //     msg += '. Would you like to book another room?'
+    //     conv.ask(msg)
+    // }
+
+
 })
 
 // Handle HTTPS POST requests
