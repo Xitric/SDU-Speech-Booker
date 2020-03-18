@@ -35,11 +35,17 @@ const app = dialogflow<{}, UserStorage>({debug: true})
 app.intent(['welcome', 'booking.cancel'], (conv) => {
     if (conv.query.endsWith('WELCOME')) {
         firestore.init()
-        firestore.getBookingsFor('eniel16').then(result => {
-            console.log(result)
-        }).catch(error => {
-            console.log(error)
-        })
+        // firestore.getBookingsFor('eniel16').then(result => {
+        //     console.log(result)
+        // }).catch(error => {
+        //     console.log(error)
+        // })
+        // firestore.createBooking('_te_52183', ['eniel16', 'kdavi16'], new Date(), new Date()).then(result => {
+        //     console.log(result)
+        // }).catch(error => {
+        //     console.log(error)
+        // })
+
         conv.ask('Welcome, I am the SDU room booker. Would you like to book a room, or hear about your current bookings?')
     } else {
         conv.ask('Would you like to book a room, or hear about your current bookings?')
@@ -89,7 +95,7 @@ app.intent('booking.confirm_room', (conv) => {
     }
 })
 
-app.intent('booking.add_participant', (conv, {person: name}: {person: string}) => {
+app.intent('booking.add_participant', (conv, {person: name}: { person: string }) => {
     const ctx = conv.contexts.get(ActionContexts.booking)
     if (ctx) {
         let participants: string[]
