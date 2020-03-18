@@ -8,6 +8,8 @@ export interface User {
 
 export interface Room {
     room: string
+    lat: number
+    lon: number
 }
 
 export interface Booking {
@@ -20,6 +22,34 @@ interface InternalBooking {
     start: admin.firestore.Timestamp
     end: admin.firestore.Timestamp
     room: admin.firestore.DocumentReference
+}
+
+export interface Coordinate {
+    lat: number
+    lon: number
+}
+
+export const CAMPUSES = {
+    ODENSE: {
+        lat: 55.368938,
+        lon: 10.428188
+    },
+    TEK: {
+        lat: 55.367312,
+        lon: 10.432063
+    },
+    ESBJERG: {
+        lat: 55.491062,
+        lon: 8.448563
+    },
+    SLAGELSE: {
+        lat: 55.407188,
+        lon: 11.347063
+    },
+    ALSION: {
+        lat: 54.912812,
+        lon: 9.779312
+    }
 }
 
 export function init() {
@@ -59,6 +89,20 @@ export async function getAvailableRooms(start: Date, end: Date): Promise<Room[]>
 
     //Filter occupied rooms and return the rest
     return allRooms.filter(room => !allBookings.some(occupied => occupied.room === room.room))
+}
+
+export async function getAvailableRoomsByLocation(start: Date, end: Date, location: Coordinate): Promise<Room[]> {
+    const rooms = await getAvailableRooms(start, end)
+    return rooms.sort(compareRoomDistance(location))
+}
+
+function compareRoomDistance(location: Coordinate): (a: Room, b: Room) => number {
+    return function (a: Room, b: Room) {
+        // No need to be accurate since only relative distances are interesting
+        const aDist = (a.lat - location.lat) - (a.lon - location.lon)
+        const bDist = (b.lat - location.lat) - (b.lon - location.lon)
+        return aDist - bDist
+    }
 }
 
 async function addRoomsToBookings(internalBookings: InternalBooking[]): Promise<Booking[]> {

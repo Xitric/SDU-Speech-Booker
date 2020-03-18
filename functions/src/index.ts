@@ -1,11 +1,12 @@
 import * as functions from 'firebase-functions'
-import {dialogflow, Suggestions} from 'actions-on-google'
+import {dialogflow, Suggestions, Permission} from 'actions-on-google'
 import * as firestore from './database-connection'
 
 const ActionContexts = {
     root: 'root',
     view: 'view',
     booking: 'booking',
+    booking_expects_permission: 'booking_expects_permission',
     booking_expects_time: 'booking_expects_time',
     booking_available: 'booking_available',
     booking_unavailable: 'booking_unavailable',
@@ -22,6 +23,10 @@ interface Booking {
 
 interface UserStorage {
     bookings: Booking[]
+    prefLoc: {
+        lat: number,
+        lon: number
+    }
 }
 
 interface TimePeriod {
@@ -35,11 +40,6 @@ const app = dialogflow<{}, UserStorage>({debug: true})
 app.intent(['welcome', 'booking.cancel'], (conv) => {
     if (conv.query.endsWith('WELCOME')) {
         firestore.init()
-        firestore.getBookingsFor('eniel16').then(result => {
-            console.log(result)
-        }).catch(error => {
-            console.log(error)
-        })
         conv.ask('Welcome, I am the SDU room booker. Would you like to book a room, or hear about your current bookings?')
     } else {
         conv.ask('Would you like to book a room, or hear about your current bookings?')
@@ -49,8 +49,33 @@ app.intent(['welcome', 'booking.cancel'], (conv) => {
 })
 
 app.intent(['booking', 'booking.different_time', 'view.book'], (conv) => {
+    if (!conv.user.storage.prefLoc) {
+        conv.contexts.set(ActionContexts.booking_expects_permission, 1)
+        conv.ask(new Permission({
+            context: 'To provide better recommendations',
+            permissions: 'DEVICE_PRECISE_LOCATION'
+        }))
+    } else {
+        conv.contexts.set(ActionContexts.booking_expects_time, 1)
+        conv.ask('When would you like to book a room?')
+    }
+})
+
+app.intent('booking.location_permission', (conv, _, permissionGranted) => {
     conv.contexts.set(ActionContexts.booking_expects_time, 1)
-    conv.ask('When would you like to book a room?')
+
+    if (!permissionGranted) {
+        conv.ask('Ok, no worries. When would you like to book a room?')
+    } else {
+        if (conv.device.location?.coordinates?.latitude &&
+            conv.device.location?.coordinates.longitude) {
+            conv.user.storage.prefLoc = {
+                lat: conv.device.location.coordinates.latitude,
+                lon: conv.device.location.coordinates.latitude
+            }
+        }
+        conv.ask('Brilliant. Now, when would you like to book a room?')
+    }
 })
 
 app.intent('booking.time', (conv) => {
@@ -58,19 +83,20 @@ app.intent('booking.time', (conv) => {
     const date = conv.parameters['date-time'] as string
     const period = conv.parameters['time-period'] as TimePeriod
 
+    // TODO: Consider time and location when looking up rooms
     if (date && period) {
-        // conv.contexts.set(ActionContexts.booking_available, 1)
-        // conv.contexts.set(ActionContexts.booking, 1, {
-        //     proposedRoom: '1.021',
-        //     date: date,
-        //     start: period.startTime,
-        //     end: period.endTime
-        // })
-        //
-        // conv.ask('I have found ten rooms at TEK. How about room 1.021?')
+        conv.contexts.set(ActionContexts.booking_available, 1)
+        conv.contexts.set(ActionContexts.booking, 1, {
+            proposedRoom: '1.021',
+            date: date,
+            start: period.startTime,
+            end: period.endTime
+        })
 
-        conv.contexts.set(ActionContexts.booking_unavailable, 1)
-        conv.ask('I am sorry, but there are no available rooms at that time. Do you want to book a room at a different time?')
+        conv.ask('I have found ten rooms at TEK. How about room 1.021?')
+
+        // conv.contexts.set(ActionContexts.booking_unavailable, 1)
+        // conv.ask('I am sorry, but there are no available rooms at that time. Do you want to book a room at a different time?')
     }
 })
 
@@ -89,7 +115,7 @@ app.intent('booking.confirm_room', (conv) => {
     }
 })
 
-app.intent('booking.add_participant', (conv, {person: name}: {person: string}) => {
+app.intent('booking.add_participant', (conv, {person: name}: { person: string }) => {
     const ctx = conv.contexts.get(ActionContexts.booking)
     if (ctx) {
         let participants: string[]
@@ -134,8 +160,9 @@ app.intent('booking.complete', (conv) => {
     }
 
     conv.contexts.set(ActionContexts.root, 1)
-    conv.ask('Your booking has been completed. ' +
-        'Would you like to book another room, or hear about your current bookings?')
+    conv.ask('<speak><audio src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>' +
+        'Your booking has been completed. ' +
+        'Would you like to book another room, or hear about your current bookings?</speak>')
     conv.ask(new Suggestions('Book a room', 'View bookings'))
 })
 
