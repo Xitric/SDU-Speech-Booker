@@ -109,15 +109,18 @@ export async function getAvailableRooms(start: Date, end: Date): Promise<Room[]>
 
 export async function getAvailableRoomsByLocation(start: Date, end: Date, location: Coordinate): Promise<Room[]> {
     const rooms = await getAvailableRooms(start, end)
-    return rooms.sort(compareRoomDistance(location))
+    if (location) {
+        return rooms.sort(compareRoomDistance(location))
+    }
+    return rooms
 }
 
 function compareRoomDistance(location: Coordinate): (a: Room, b: Room) => number {
     return function (a: Room, b: Room) {
         // No need to be accurate since only relative distances are interesting
-        const aDist = (a.lat - location.lat) - (a.lon - location.lon)
-        const bDist = (b.lat - location.lat) - (b.lon - location.lon)
-        return aDist - bDist
+        const aDist = (a.lat - location.lat) + (a.lon - location.lon)
+        const bDist = (b.lat - location.lat) + (b.lon - location.lon)
+        return bDist - aDist
     }
 }
 

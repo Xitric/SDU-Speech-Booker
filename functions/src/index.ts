@@ -3,7 +3,6 @@ import {dialogflow, Suggestions, Permission} from 'actions-on-google'
 import * as firestore from './database-connection'
 
 
-
 const ActionContexts = {
     root: 'root',
     view: 'view',
@@ -45,7 +44,7 @@ app.intent(['welcome', 'booking.cancel'], (conv) => {
     if (conv.query.endsWith('WELCOME')) {
         firestore.init()
 
-        if (! conv.user.storage.name) {
+        if (!conv.user.storage.name) {
             conv.contexts.set(ActionContexts.welcome_expects_permission, 1)
             conv.ask(new Permission({
                 context: 'Welcome, I am the SDU room booker. To provide a personalized experience',
@@ -96,10 +95,10 @@ app.intent('booking.location_permission', (conv, _, permissionGranted) => {
         conv.ask('Ok, no worries. When would you like to book a room?')
     } else {
         if (conv.device.location?.coordinates?.latitude &&
-            conv.device.location?.coordinates.longitude) {
+            conv.device.location.coordinates.longitude) {
             conv.user.storage.prefLoc = {
                 lat: conv.device.location.coordinates.latitude,
-                lon: conv.device.location.coordinates.latitude
+                lon: conv.device.location.coordinates.longitude
             }
         }
         conv.ask('Brilliant. Now, when would you like to book a room?')
@@ -111,30 +110,28 @@ app.intent('booking.time', (conv) => {
     const date = conv.parameters['date-time'] as string
     const period = conv.parameters['time-period'] as TimePeriod
 
-    // TODO: Consider time and location when looking up rooms
     if (date && period) {
         const startDate = new Date(period.startTime)
         const endDate = new Date(period.endTime)
 
-        return firestore.getAvailableRooms(startDate,endDate).then(roomResults => {
-            if(roomResults.length > 0){
-                const roomAvailable = roomResults[0].room
+        return firestore.getAvailableRoomsByLocation(startDate, endDate, conv.user.storage.prefLoc).then(roomResults => {
+            if (roomResults.length > 0) {
+                const roomAvailable = roomResults[0].name
                 conv.contexts.set(ActionContexts.booking_available, 1)
-                 conv.contexts.set(ActionContexts.booking, 1, {
-                     proposedRoom: roomAvailable,
-                     date: date,
-                     start: period.startTime,
-                     end: period.endTime
-                 })
+                conv.contexts.set(ActionContexts.booking, 1, {
+                    proposedRoom: roomResults[0].id,
+                    date: date,
+                    start: period.startTime,
+                    end: period.endTime
+                })
                 conv.ask('I have found ' + roomResults.length + ' available rooms. How about room ' + roomAvailable)
-            }else {
+            } else {
                 conv.contexts.set(ActionContexts.booking_unavailable, 1)
                 conv.ask('I am sorry, but there are no available rooms at that time. Do you want to book a room at a different time?')
             }
         }).catch(error => {
             console.log(error)
         })
-
     }
 
     return
@@ -207,15 +204,15 @@ app.intent('booking.complete', (conv) => {
 })
 
 app.intent('view', (conv) => {
-    const months = [ 'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December' ]
+    const months = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December']
 
     conv.contexts.set(ActionContexts.view, 1)
     return firestore.getBookingsFor('eniel16').then(bookings => {
-        if(bookings.length > 0){
+        if (bookings.length > 0) {
             let prefix = ''
             let msg = 'Your bookings are '
-            for (const booking of bookings){
+            for (const booking of bookings) {
                 msg += prefix
                 msg += booking.room
                 msg += ' on '
@@ -236,7 +233,7 @@ app.intent('view', (conv) => {
             }
             msg += '. Would you like to book another room?'
             conv.ask(msg)
-        }else {
+        } else {
             conv.ask('It looks like you don\'t have any bookings. Would your like to book a room?')
         }
     })
