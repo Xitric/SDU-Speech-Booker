@@ -91,7 +91,8 @@ export async function createBooking(room: string, participants: string[], start:
         await admin.firestore().doc('users/' + participant).collection('bookings').doc(booking.id).create({})
     }
     return booking
-    
+}
+
 export async function getRelevantUsersByName(userRealName: string, context: User): Promise<User[]> {
     const allUsers = await admin.firestore().collection('users').get()
 
