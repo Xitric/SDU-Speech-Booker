@@ -105,6 +105,8 @@ app.intent('booking.confirm_room', (conv) => {
             end: ctx.parameters['end']
         })
 
+
+
         conv.ask('Alright! Who is the first person you want to add to your booking?')
     }
 })
@@ -136,27 +138,25 @@ app.intent('booking.add_participant', (conv, {person: name}: { person: string })
 
 app.intent('booking.complete', (conv) => {
     const ctx = conv.contexts.get('booking')
-    if (ctx) {
-        const booking: Booking = {
-            room: ctx.parameters['room'] as string || 'ERROR',
-            // TODO: Cannot store in user storage, I think
-            // participants: ctx.parameters['participants'] as string[],
-            date: ctx.parameters['date'] as string || 'ERROR',
-            start: ctx.parameters['start'] as string || 'ERROR',
-            end: ctx.parameters['end'] as string || 'ERROR'
-        }
 
-        if (!conv.user.storage.bookings) {
-            conv.user.storage.bookings = [booking]
-        } else {
-            conv.user.storage.bookings.push(booking)
-        }
+    if(ctx) {
+        const room = ctx.parameters['room'] as string
+        const startDate = new Date(ctx.parameters['start'] as string)
+        const endDate = new Date(ctx.parameters['end'] as string)
+        const participants = ctx.parameters['participants'] as string[]
+
+        return firestore.createBooking(room, participants, startDate, endDate).then(result => {
+            console.log(result)
+            conv.contexts.set(ActionContexts.root, 1)
+            conv.ask('Your booking has been completed. ' +
+                'Would you like to book another room, or hear about your current bookings?')
+            conv.ask(new Suggestions('Book a room', 'View bookings'))
+        }).catch(error => {
+            console.log(error)
+        })
     }
 
-    conv.contexts.set(ActionContexts.root, 1)
-    conv.ask('Your booking has been completed. ' +
-        'Would you like to book another room, or hear about your current bookings?')
-    conv.ask(new Suggestions('Book a room', 'View bookings'))
+    return
 })
 
 app.intent('view', (conv) => {
@@ -196,25 +196,6 @@ app.intent('view', (conv) => {
 
     return
 
-    // if (!conv.user.storage.bookings) {
-    //     conv.ask('It looks like you don\'t have any bookings. Would your like to book a room?')
-    // } else {
-    //     let prefix = ''
-    //     let msg = 'Your bookings are '
-    //     for (const booking of conv.user.storage.bookings) {
-    //         msg += prefix
-    //         msg += booking.room
-    //         msg += ' on '
-    //         msg += booking.date
-    //         msg += ' from '
-    //         msg += booking.start
-    //         msg += ' to '
-    //         msg += booking.end
-    //         prefix = ' and '
-    //     }
-    //     msg += '. Would you like to book another room?'
-    //     conv.ask(msg)
-    // }
 
 
 })
