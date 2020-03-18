@@ -1,5 +1,5 @@
 import * as functions from 'firebase-functions'
-import {dialogflow, Suggestions, Permission} from 'actions-on-google'
+import {dialogflow, Suggestions, Permission, DialogflowConversation, Contexts} from 'actions-on-google'
 import * as firestore from './database-connection'
 
 
@@ -13,6 +13,7 @@ const ActionContexts = {
     booking_unavailable: 'booking_unavailable',
     booking_browsing: 'booking_browsing',
     booking_expects_participant: 'booking_expects_participant',
+    booking_expects_participant_confirmation: 'booking_expects_participant_confirmation',
     welcome_expects_permission: 'welcome_expects_permission'
 }
 
@@ -152,16 +153,86 @@ app.intent('booking.confirm_room', (conv) => {
     }
 })
 
-app.intent('booking.add_participant', (conv, {person: name}: { person: string }) => {
+app.intent('booking.add_participant', (conv, person: { person: {name: string }}) => {
+    const userName = person.person.name
+
+    return firestore.getUser('kdavi16').then(user => {
+        console.log('You: ' + user.id)
+        return firestore.getRelevantUsersByName(userName, user).then(options => {
+            console.log(options.length)
+            const participantOptions = options.map(option => option.id)
+
+            if (participantOptions.length === 0) {
+                conv.contexts.set(ActionContexts.booking_expects_participant, 1)
+                conv.contexts.set(ActionContexts.booking, 1, conv.contexts.get(ActionContexts.booking)?.parameters)
+                conv.ask(`Sorry, I don't know any user named ${userName}. Is there anyone else you would like to add?`)
+            } else if (participantOptions.length === 1) {
+                addParticipantToBooking(participantOptions.pop() || '', conv)
+                conv.ask('Anyone else you wish to add, or was that all?')
+            } else {
+                const ctx = conv.contexts.get(ActionContexts.booking)
+                if (ctx) {
+                    const possibility = participantOptions[0]
+                    conv.contexts.set(ActionContexts.booking_expects_participant_confirmation, 1)
+                    conv.contexts.set(ActionContexts.booking, 1, {
+                        room: ctx.parameters['room'],
+                        date: ctx.parameters['date'],
+                        start: ctx.parameters['start'],
+                        end: ctx.parameters['end'],
+                        participants: ctx.parameters['participants'],
+                        participantProposals: participantOptions
+                    })
+                    conv.ask(`Did you mean ${possibility}?`)
+                }
+            }
+        })}
+    ).catch(error => console.log(error))
+})
+
+app.intent('booking.add_participant.confirm', (conv) => {
+    const ctx = conv.contexts.get(ActionContexts.booking)
+    if (ctx) {
+        const participant = (ctx.parameters['participantProposals'] as string[])[0]
+        addParticipantToBooking(participant, conv)
+        conv.ask('Anyone else you wish to add, or was that all?')
+    }
+})
+
+app.intent('booking.add_participant.decline', (conv) => {
+    const ctx = conv.contexts.get(ActionContexts.booking)
+    if (ctx) {
+        const participantOptions = (ctx.parameters['participantProposals'] as string[]).slice(1)
+
+        if (participantOptions.length === 0) {
+            conv.contexts.set(ActionContexts.booking_expects_participant, 1)
+            conv.contexts.set(ActionContexts.booking, 1, ctx.parameters)
+            conv.ask('Sorry, I don\'t know who you mean then. Is there anyone else you would like to add?')
+        } else {
+            const possibility = participantOptions[0]
+            conv.contexts.set(ActionContexts.booking_expects_participant_confirmation, 1)
+            conv.contexts.set(ActionContexts.booking, 1, {
+                room: ctx.parameters['room'],
+                date: ctx.parameters['date'],
+                start: ctx.parameters['start'],
+                end: ctx.parameters['end'],
+                participants: ctx.parameters['participants'],
+                participantProposals: participantOptions
+            })
+            conv.ask(`How about ${possibility}, then?`)
+        }
+    }
+})
+
+function addParticipantToBooking(participant: string, conv: DialogflowConversation<{}, UserStorage, Contexts>) {
     const ctx = conv.contexts.get(ActionContexts.booking)
     if (ctx) {
         let participants: string[]
 
         if (ctx.parameters['participants']) {
             participants = ctx.parameters['participants'] as string[]
-            participants.push(name)
+            participants.push(participant)
         } else {
-            participants = [name]
+            participants = [participant]
         }
 
         conv.contexts.set(ActionContexts.booking_expects_participant, 1)
@@ -172,10 +243,8 @@ app.intent('booking.add_participant', (conv, {person: name}: { person: string })
             end: ctx.parameters['end'],
             participants: participants
         })
-
-        conv.ask('Anyone else you wish to add, or was that all?')
     }
-})
+}
 
 app.intent('booking.complete', (conv) => {
     const ctx = conv.contexts.get('booking')

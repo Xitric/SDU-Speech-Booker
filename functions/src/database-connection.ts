@@ -2,6 +2,13 @@ import * as admin from 'firebase-admin'
 
 export interface User {
     name: string
+    id: string
+    email: string
+    education: string
+}
+
+interface InternalUser {
+    name: string
     email: string
     education: string
 }
@@ -161,11 +168,20 @@ export async function getRelevantUsersByName(userRealName: string, context: User
 
     //It is definitely not users with a mismatching first name
     const firstName = userRealName.split(' ')[0]
-    const filteredByFirstName = allUsers.docs.map(users => (users.data() as User)).filter(userResult => userResult.name.split(' ')[0] === firstName)
+    const filteredByFirstName = allUsers.docs.map(userRef => {
+        const internalUser = userRef.data() as InternalUser
+        const user: User = {
+            name: internalUser.name,
+            id: userRef.id,
+            email: internalUser.email,
+            education: internalUser.education
+        }
+        return user
+    }).filter(userResult => userResult.name.split(' ')[0].toLocaleLowerCase() === firstName.toLocaleLowerCase())
 
     //Matching last names are good indicators for relevance
     const lastNames = userRealName.split(' ').slice(1)
-    const filteredByLastNames = arrangeByLastName(filteredByFirstName, lastNames)
+    const filteredByLastNames = arrangeByLastName(filteredByFirstName, lastNames || [])
 
     //It is less likely, but not impossible, to be someone from another education
     const likelyFilteredByEducation = arrangeByEducation(filteredByLastNames[0], context.education)
@@ -186,7 +202,7 @@ function arrangeByEducation(users: User[], targetEducation: string): [User[], Us
 }
 
 function arrangeByLastName(users: User[], lastNames: string[]): [User[], User[]] {
-    const likelyUsers = users.filter(userResult => lastNames.some(n => userResult.name.includes(n)))
+    const likelyUsers = users.filter(userResult => lastNames.some(n => userResult.name.toLocaleLowerCase().includes(n.toLocaleLowerCase())))
     const unlikelyUsers = users.filter(userResult => !likelyUsers.includes(userResult))
 
     return [likelyUsers, unlikelyUsers]
