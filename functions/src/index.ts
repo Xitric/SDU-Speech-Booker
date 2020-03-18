@@ -3,7 +3,6 @@ import {dialogflow, Suggestions} from 'actions-on-google'
 import * as firestore from './database-connection'
 
 
-
 const ActionContexts = {
     root: 'root',
     view: 'view',
@@ -26,13 +25,17 @@ interface UserStorage {
     bookings: Booking[]
 }
 
+interface AvailableRooms {
+    rooms: string[]
+}
+
 interface TimePeriod {
     startTime: string
     endTime: string
 }
 
 // Instantiate DialogFlow client
-const app = dialogflow<{}, UserStorage>({debug: true})
+const app = dialogflow<AvailableRooms, UserStorage>({debug: true})
 
 app.intent(['welcome', 'booking.cancel'], (conv) => {
     if (conv.query.endsWith('WELCOME')) {
@@ -57,9 +60,28 @@ app.intent(['welcome', 'booking.cancel'], (conv) => {
 })
 
 app.intent('booking.browse', (conv) => {
-    conv.contexts.set(ActionContexts.booking, 1)
-    conv.contexts.set(ActionContexts.booking_available, 1)
-    conv.ask('Okay, how about ROOM')
+    const ctx = conv.contexts.get(ActionContexts.booking)
+    if (ctx) {
+        const rooms = ctx.parameters['availableRooms'] as firestore.Room[]
+        if (rooms && rooms.length > 0) {
+            const room = rooms.pop()?.room
+
+            conv.contexts.set(ActionContexts.booking_available, 1)
+            conv.contexts.set(ActionContexts.booking, 1, {
+                proposedRoom: room,
+                availableRooms: rooms,
+                date: ctx.parameters['date'],
+                start: ctx.parameters['start'],
+                end: ctx.parameters['end']
+            })
+
+            conv.ask('Okay, how about ' + room + ' size: ' + rooms.length)
+        } else {
+            conv.contexts.set(ActionContexts.booking_unavailable, 1)
+            conv.contexts.set(ActionContexts.booking, 1)
+            conv.ask('I am sorry, but there are no other available rooms at that time. Do you want to book a room again?')
+        }
+    }
 })
 
 app.intent(['booking', 'booking.different_time', 'view.book'], (conv) => {
@@ -76,18 +98,21 @@ app.intent('booking.time', (conv) => {
         const startDate = new Date(period.startTime)
         const endDate = new Date(period.endTime)
 
-        return firestore.getAvailableRooms(startDate,endDate).then(roomResults => {
-            if(roomResults.length > 0){
-                const roomAvailable = roomResults[0].room
+        return firestore.getAvailableRooms(startDate, endDate).then(roomResults => {
+            if (roomResults.length > 0) {
+
+                const roomAvailable = roomResults.pop()?.room
+
                 conv.contexts.set(ActionContexts.booking_available, 1)
-                 conv.contexts.set(ActionContexts.booking, 1, {
-                     proposedRoom: roomAvailable,
-                     date: date,
-                     start: period.startTime,
-                     end: period.endTime
-                 })
+                conv.contexts.set(ActionContexts.booking, 1, {
+                    proposedRoom: roomAvailable,
+                    availableRooms: roomResults,
+                    date: date,
+                    start: period.startTime,
+                    end: period.endTime,
+                })
                 conv.ask('I have found ' + roomResults.length + ' available rooms. How about room ' + roomAvailable)
-            }else {
+            } else {
                 conv.contexts.set(ActionContexts.booking_unavailable, 1)
                 conv.ask('I am sorry, but there are no available rooms at that time. Do you want to book a room at a different time?')
             }
