@@ -2,6 +2,8 @@ import * as functions from 'firebase-functions'
 import {dialogflow, Suggestions} from 'actions-on-google'
 import * as firestore from './database-connection'
 
+
+
 const ActionContexts = {
     root: 'root',
     view: 'view',
@@ -71,20 +73,31 @@ app.intent('booking.time', (conv) => {
     const period = conv.parameters['time-period'] as TimePeriod
 
     if (date && period) {
-        conv.contexts.set(ActionContexts.booking_available, 1)
-        conv.contexts.set(ActionContexts.booking, 1, {
-            proposedRoom: '1.021',
-            date: date,
-            start: period.startTime,
-            end: period.endTime
+        const startDate = new Date(period.startTime)
+        const endDate = new Date(period.endTime)
+
+        return firestore.getAvailableRooms(startDate,endDate).then(roomResults => {
+            if(roomResults.length > 0){
+                const roomAvailable = roomResults[0].room
+                conv.contexts.set(ActionContexts.booking_available, 1)
+                 conv.contexts.set(ActionContexts.booking, 1, {
+                     proposedRoom: roomAvailable,
+                     date: date,
+                     start: period.startTime,
+                     end: period.endTime
+                 })
+                conv.ask('I have found ' + roomResults.length + ' available rooms. How about room ' + roomAvailable)
+            }else {
+                conv.contexts.set(ActionContexts.booking_unavailable, 1)
+                conv.ask('I am sorry, but there are no available rooms at that time. Do you want to book a room at a different time?')
+            }
+        }).catch(error => {
+            console.log(error)
         })
 
-        conv.ask('I have found ten rooms at TEK. How about room 1.021?')
-
-
-        // conv.contexts.set(ActionContexts.booking_unavailable, 1)
-        // conv.ask('I am sorry, but there are no available rooms at that time. Do you want to book a room at a different time?')
     }
+
+    return
 })
 
 app.intent('booking.confirm_room', (conv) => {
