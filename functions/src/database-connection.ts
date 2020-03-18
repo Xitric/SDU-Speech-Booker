@@ -75,11 +75,22 @@ async function addRoomsToBookings(internalBookings: InternalBooking[]): Promise<
             })
         })
     })
+
     return await Promise.all(bookingRoomPromises)
 }
 
 export async function createBooking(room: string, participants: string[], start: Date, end: Date) {
-    return null
+    const roomRef = await admin.firestore().doc('rooms/' + room)
+    const booking = await admin.firestore().collection('bookings').add({
+        end: admin.firestore.Timestamp.fromDate(end),
+        room: roomRef,
+        start: admin.firestore.Timestamp.fromDate(start)
+    })
+
+    for (const participant of participants) {
+        await admin.firestore().doc('users/' + participant).collection('bookings').doc(booking.id).create({})
+    }
+    return booking
 }
 
 export async function getRelevantUsersByName(userRealName: string, context: User): Promise<User[]> {
