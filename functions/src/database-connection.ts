@@ -1,13 +1,30 @@
 import * as admin from 'firebase-admin'
+import * as functions from 'firebase-functions'
 
 export interface User {
+    name: string
+    id: string
+    email: string
+    education: string
+}
+
+interface InternalUser {
     name: string
     email: string
     education: string
 }
 
 export interface Room {
+    name: string
+    id: string
+    lat: number
+    lon: number
+}
+
+interface InternalRoom {
     room: string
+    lat: number
+    lon: number
 }
 
 export interface Booking {
@@ -22,13 +39,19 @@ interface InternalBooking {
     room: admin.firestore.DocumentReference
 }
 
+export interface Coordinate {
+    lat: number
+    lon: number
+}
+
 export function init() {
     if (!admin.apps.length) {
-        admin.initializeApp()
+        admin.initializeApp(functions.config().firebase)
     }
 }
 
 export async function getBookingsFor(userName: string): Promise<Booking[]> {
+    init()
     const userResult = await admin.firestore().collection('users/' + userName + '/bookings').listDocuments()
     const bookingIds = userResult.map(bookingRef => bookingRef.id)
 
@@ -42,6 +65,7 @@ export async function getBookingsFor(userName: string): Promise<Booking[]> {
 }
 
 export async function getAvailableRooms(start: Date, end: Date): Promise<Room[]> {
+    init()
     //Get occupied rooms
     //First we get the bookings that end after our booking begins
     const bookingRefs = await admin.firestore().collection('bookings')
@@ -55,20 +79,48 @@ export async function getAvailableRooms(start: Date, end: Date): Promise<Room[]>
 
     //Get all rooms
     const roomRefs = await admin.firestore().collection('rooms').get()
-    const allRooms = roomRefs.docs.map(roomRef => roomRef.data() as Room)
+    const allRooms = roomRefs.docs.map(roomRef =>  {
+        const internalRoom = roomRef.data() as InternalRoom
+        const room: Room = {
+            name: internalRoom.room,
+            id: roomRef.id,
+            lat: internalRoom.lat,
+            lon: internalRoom.lon
+        }
+        return room
+    })
 
     //Filter occupied rooms and return the rest
-    return allRooms.filter(room => !allBookings.some(occupied => occupied.room === room.room))
+    return allRooms.filter(room => !allBookings.some(occupied => occupied.room === room.name))
+}
+
+export async function getAvailableRoomsByLocation(start: Date, end: Date, location: Coordinate): Promise<Room[]> {
+    init()
+    const rooms = await getAvailableRooms(start, end)
+    if (location) {
+        return rooms.sort(compareRoomDistance(location))
+    }
+    return rooms
+}
+
+function compareRoomDistance(location: Coordinate): (a: Room, b: Room) => number {
+    return function (a: Room, b: Room) {
+        // No need to be accurate since only relative distances are interesting
+        const aDist = (a.lat - location.lat) + (a.lon - location.lon)
+        const bDist = (b.lat - location.lat) + (b.lon - location.lon)
+        return bDist - aDist
+    }
 }
 
 async function addRoomsToBookings(internalBookings: InternalBooking[]): Promise<Booking[]> {
+    init()
     const bookingRoomPromises = internalBookings.map(internalBooking => {
         return new Promise<Booking>((resolve, reject) => {
             admin.firestore().collection('rooms').doc(internalBooking.room.id).get().then(roomResult => {
                 resolve({
                     start: internalBooking.start.toDate(),
                     end: internalBooking.end.toDate(),
-                    room: (roomResult.data() as Room).room
+                    room: (roomResult.data() as InternalRoom).room
                 })
             }).catch(error => {
                 reject(error)
@@ -80,6 +132,7 @@ async function addRoomsToBookings(internalBookings: InternalBooking[]): Promise<
 }
 
 export async function createBooking(room: string, participants: string[], start: Date, end: Date) {
+    init()
     const roomRef = await admin.firestore().doc('rooms/' + room)
     const booking = await admin.firestore().collection('bookings').add({
         end: admin.firestore.Timestamp.fromDate(end),
@@ -94,15 +147,25 @@ export async function createBooking(room: string, participants: string[], start:
 }
 
 export async function getRelevantUsersByName(userRealName: string, context: User): Promise<User[]> {
+    init()
     const allUsers = await admin.firestore().collection('users').get()
 
     //It is definitely not users with a mismatching first name
     const firstName = userRealName.split(' ')[0]
-    const filteredByFirstName = allUsers.docs.map(users => (users.data() as User)).filter(userResult => userResult.name.split(' ')[0] === firstName)
+    const filteredByFirstName = allUsers.docs.map(userRef => {
+        const internalUser = userRef.data() as InternalUser
+        const user: User = {
+            name: internalUser.name,
+            id: userRef.id,
+            email: internalUser.email,
+            education: internalUser.education
+        }
+        return user
+    }).filter(userResult => userResult.name.split(' ')[0].toLocaleLowerCase() === firstName.toLocaleLowerCase())
 
     //Matching last names are good indicators for relevance
     const lastNames = userRealName.split(' ').slice(1)
-    const filteredByLastNames = arrangeByLastName(filteredByFirstName, lastNames)
+    const filteredByLastNames = arrangeByLastName(filteredByFirstName, lastNames || [])
 
     //It is less likely, but not impossible, to be someone from another education
     const likelyFilteredByEducation = arrangeByEducation(filteredByLastNames[0], context.education)
@@ -123,13 +186,14 @@ function arrangeByEducation(users: User[], targetEducation: string): [User[], Us
 }
 
 function arrangeByLastName(users: User[], lastNames: string[]): [User[], User[]] {
-    const likelyUsers = users.filter(userResult => lastNames.some(n => userResult.name.includes(n)))
+    const likelyUsers = users.filter(userResult => lastNames.some(n => userResult.name.toLocaleLowerCase().includes(n.toLocaleLowerCase())))
     const unlikelyUsers = users.filter(userResult => !likelyUsers.includes(userResult))
 
     return [likelyUsers, unlikelyUsers]
 }
 
 export async function getUser(userName: string): Promise<User> {
+    init()
     const userResult = await admin.firestore().collection('users').doc(userName).get()
     return userResult.data() as User
 }
