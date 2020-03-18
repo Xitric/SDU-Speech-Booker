@@ -136,6 +136,8 @@ app.intent('booking.confirm_room', (conv) => {
             end: ctx.parameters['end']
         })
 
+
+
         conv.ask('Alright! Who is the first person you want to add to your booking?')
     }
 })
@@ -167,51 +169,66 @@ app.intent('booking.add_participant', (conv, {person: name}: { person: string })
 
 app.intent('booking.complete', (conv) => {
     const ctx = conv.contexts.get('booking')
-    if (ctx) {
-        const booking: Booking = {
-            room: ctx.parameters['room'] as string || 'ERROR',
-            // TODO: Cannot store in user storage, I think
-            // participants: ctx.parameters['participants'] as string[],
-            date: ctx.parameters['date'] as string || 'ERROR',
-            start: ctx.parameters['start'] as string || 'ERROR',
-            end: ctx.parameters['end'] as string || 'ERROR'
-        }
 
-        if (!conv.user.storage.bookings) {
-            conv.user.storage.bookings = [booking]
-        } else {
-            conv.user.storage.bookings.push(booking)
-        }
+    if(ctx) {
+        const room = ctx.parameters['room'] as string
+        const startDate = new Date(ctx.parameters['start'] as string)
+        const endDate = new Date(ctx.parameters['end'] as string)
+        const participants = ctx.parameters['participants'] as string[]
+
+        return firestore.createBooking(room, participants, startDate, endDate).then(result => {
+            console.log(result)
+            conv.contexts.set(ActionContexts.root, 1)
+            conv.ask('Your booking has been completed. ' +
+                'Would you like to book another room, or hear about your current bookings?')
+            conv.ask(new Suggestions('Book a room', 'View bookings'))
+        }).catch(error => {
+            console.log(error)
+        })
     }
 
-    conv.contexts.set(ActionContexts.root, 1)
-    conv.ask('Your booking has been completed. ' +
-        'Would you like to book another room, or hear about your current bookings?')
-    conv.ask(new Suggestions('Book a room', 'View bookings'))
+    return
 })
 
 app.intent('view', (conv) => {
-    conv.contexts.set(ActionContexts.view, 1)
+    const months = [ 'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December' ]
 
-    if (!conv.user.storage.bookings) {
-        conv.ask('It looks like you don\'t have any bookings. Would your like to book a room?')
-    } else {
-        let prefix = ''
-        let msg = 'Your bookings are '
-        for (const booking of conv.user.storage.bookings) {
-            msg += prefix
-            msg += booking.room
-            msg += ' on '
-            msg += booking.date
-            msg += ' from '
-            msg += booking.start
-            msg += ' to '
-            msg += booking.end
-            prefix = ' and '
+    conv.contexts.set(ActionContexts.view, 1)
+    return firestore.getBookingsFor('eniel16').then(bookings => {
+        if(bookings.length > 0){
+            let prefix = ''
+            let msg = 'Your bookings are '
+            for (const booking of bookings){
+                msg += prefix
+                msg += booking.room
+                msg += ' on '
+                msg += months[booking.start.getMonth()]
+                msg += ' '
+                msg += booking.start.getDate()
+                msg += ' '
+                msg += booking.start.getFullYear()
+                msg += ' from '
+                msg += booking.start.getHours()
+                msg += ':'
+                msg += booking.start.getMinutes()
+                msg += ' to '
+                msg += booking.end.getHours()
+                msg += ':'
+                msg += booking.end.getMinutes()
+                prefix = ' and '
+            }
+            msg += '. Would you like to book another room?'
+            conv.ask(msg)
+        }else {
+            conv.ask('It looks like you don\'t have any bookings. Would your like to book a room?')
         }
-        msg += '. Would you like to book another room?'
-        conv.ask(msg)
-    }
+    })
+
+    return
+
+
+
 })
 
 // Handle HTTPS POST requests
