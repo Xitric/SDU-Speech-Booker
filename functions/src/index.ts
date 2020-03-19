@@ -17,15 +17,7 @@ const ActionContexts = {
     welcome_expects_permission: 'welcome_expects_permission'
 }
 
-interface Booking {
-    room: string
-    date: string
-    start: string
-    end: string
-}
-
 interface UserStorage {
-    bookings: Booking[],
     name: string
     prefLoc: {
         lat: number,
